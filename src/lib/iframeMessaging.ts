@@ -1,6 +1,3 @@
-// Utilities for parent <-> iframe communication via window.postMessage.
-// We keep message types centralized here for safety + future validation (zod could be added).
-
 export type IframeOutboundMessage =
   | { type: "init" }
   | { type: "hover"; payload: HoverPayload }

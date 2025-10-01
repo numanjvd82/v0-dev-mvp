@@ -1,27 +1,10 @@
 "use client";
-// Renders hover/selection outlines over the iframe content plus the contextual toolbar.
-// Uses Framer Motion for subtle animations.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePreviewStore } from "@/lib/previewStore";
-// Using the new Motion package ("motion") instead of legacy framer-motion import path.
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "./ui/button"; // relative path
 import { Trash2, Pencil, RefreshCw, X } from "lucide-react";
-
-// Helper to translate iframe-relative rect to page coordinates.
-function toAbsolute(
-  rect: { x: number; y: number; width: number; height: number },
-  iframeRect?: DOMRect
-) {
-  if (!iframeRect) return rect;
-  return {
-    x: iframeRect.left + rect.x,
-    y: iframeRect.top + rect.y,
-    width: rect.width,
-    height: rect.height,
-  };
-}
 
 export const PreviewOverlay: React.FC = () => {
   const hover = usePreviewStore((s) => s.hover);
@@ -75,8 +58,6 @@ export const PreviewOverlay: React.FC = () => {
   const selectedPos = selected ? place(selected.rect) : undefined;
   const activePos = active ? place(active.rect) : undefined;
 
-  // When toolbar is present, we want pointer events to pass through everywhere EXCEPT the toolbar itself.
-  // Container is pointer-events-none; toolbar div will re-enable pointer-events-auto.
   return (
     <div
       ref={containerRef}
@@ -121,7 +102,6 @@ export const PreviewOverlay: React.FC = () => {
               left: activePos.left,
               top: Math.max(4, activePos.top - 40), // 40px above element
             }}
-            // Stop events so underlying iframe element isn't clicked while interacting with toolbar
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
