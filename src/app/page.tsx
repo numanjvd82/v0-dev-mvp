@@ -1,102 +1,111 @@
-import Image from "next/image";
+"use client";
+
+// Prototype main page for AI-powered web builder
+// Provides: prompt input, mock AI generation, preview iframe, overlay with toolbar.
+
+import { useState } from "react";
+import { Button } from "../components/ui/button";
+import { PreviewFrame } from "../components/PreviewFrame";
+import { PreviewOverlay } from "../components/PreviewOverlay";
+import { usePreviewStore, PreviewState } from "@/lib/previewStore";
+import { Sparkles, RefreshCw } from "lucide-react";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [input, setInput] = useState(
+    "A landing hero with headline and CTA and three feature cards"
+  );
+  const generated = usePreviewStore((s: PreviewState) => s.generated);
+  const setGenerated = usePreviewStore((s: PreviewState) => s.setGenerated);
+  const isGenerating = usePreviewStore((s: PreviewState) => s.isGenerating);
+  const setIsGenerating = usePreviewStore(
+    (s: PreviewState) => s.setIsGenerating
+  );
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  async function handleGenerate() {
+    setIsGenerating(true);
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: input }),
+      });
+      if (!res.ok) throw new Error("Generation failed");
+      const data = await res.json();
+      // Server returns { code } with raw HTML/JSX snippet (no fences)
+      setGenerated(data.code || "");
+    } catch (e: any) {
+      setGenerated(
+        `<div style='padding:2rem;font-family:system-ui;color:#b00'>Error: ${e.message}</div>`
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  function handleReset() {
+    setGenerated("");
+    // Clear any lingering hover/selection overlays when iframe unmounts
+    const store = (usePreviewStore as any).getState();
+    store.setHover(undefined);
+    store.setSelected(undefined);
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      {/* Top bar with prompt input */}
+      <header className="border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-30">
+        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-3">
+          <div className="flex-1 flex items-center gap-2">
+            <input
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring font-mono"
+              placeholder="Prompt or paste JSX..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+          <Button
+            size="sm"
+            onClick={handleGenerate}
+            disabled={isGenerating}
+            className="gap-1"
           >
-            Read our docs
-          </a>
+            <Sparkles className="h-4 w-4" />{" "}
+            {isGenerating ? "Generating" : "Generate"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleReset}
+            disabled={isGenerating}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+      </header>
+      {/* Workspace area */}
+      <main className="flex-1 relative">
+        <div className="h-full w-full relative flex items-stretch min-h-[600px]">
+          {generated ? (
+            <>
+              <PreviewFrame />
+              <PreviewOverlay />
+            </>
+          ) : (
+            <div className="m-auto text-center max-w-md p-8 text-sm text-muted-foreground select-none">
+              <p className="mb-3 font-medium text-foreground">No preview yet</p>
+              <p className="mb-4">
+                Enter a prompt (or paste JSX) and click Generate to mount the
+                sandboxed preview iframe.
+              </p>
+              {isGenerating && (
+                <p className="animate-pulse text-xs">Generating...</p>
+              )}
+            </div>
+          )}
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+      <footer className="border-t text-xs text-muted-foreground p-3 flex items-center gap-3 justify-center">
+        Prototype • Hover elements to see toolbar • Click to select
       </footer>
     </div>
   );
