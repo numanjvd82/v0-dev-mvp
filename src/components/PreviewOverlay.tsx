@@ -7,7 +7,7 @@ import { usePreviewStore } from "@/lib/previewStore";
 // Using the new Motion package ("motion") instead of legacy framer-motion import path.
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "./ui/button"; // relative path
-import { Trash2, Pencil, RefreshCw } from "lucide-react";
+import { Trash2, Pencil, RefreshCw, X } from "lucide-react";
 
 // Helper to translate iframe-relative rect to page coordinates.
 function toAbsolute(
@@ -129,6 +129,27 @@ export const PreviewOverlay: React.FC = () => {
               <span className="text-[11px] uppercase tracking-wide text-muted-foreground px-1">
                 {active.tag}
               </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs"
+                title="Clear selection"
+                onClick={() => {
+                  if (selected) {
+                    usePreviewStore.getState().setSelected(undefined);
+                    // Inform iframe to clear internal selectedEl
+                    window.postMessage(
+                      {
+                        ns: "preview-bridge-parent",
+                        data: { type: "unselect" },
+                      },
+                      "*"
+                    );
+                  }
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"

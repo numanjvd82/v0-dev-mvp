@@ -25,15 +25,29 @@ export const PreviewFrame: React.FC = () => {
     <script>(function(){
       const NS='preview-bridge';
       function post(m){ parent.postMessage({ ns:NS, data:m }, '*'); }
-      let id=0, lastHover=null;
+      let id=0, lastHover=null, selectedEl=null;
       function assign(root){ if(!root) return; const w=document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT); while(w.nextNode()){ const el=w.currentNode; if(el instanceof HTMLElement && !el.dataset.nodeId){ el.dataset.nodeId='n'+(++id); } } }
       function payload(el){ const r=el.getBoundingClientRect(); return { nodeId:el.dataset.nodeId, tag:el.tagName.toLowerCase(), rect:{ x:r.x,y:r.y,width:r.width,height:r.height } }; }
-      const ro=new ResizeObserver(es=>{ for(const e of es){ const el=e.target; if(!(el instanceof HTMLElement) || !el.dataset.nodeId) continue; const r=el.getBoundingClientRect(); post({ type:'mutation', payload:{ nodeId:el.dataset.nodeId, rect:{ x:r.x,y:r.y,width:r.width,height:r.height, top:r.top,left:r.left,right:r.right,bottom:r.bottom } } }); } });
+      const ro=new ResizeObserver(es=>{ for(const e of es){ const el=e.target; if(!(el instanceof HTMLElement) || !el.dataset.nodeId) continue; if(el===selectedEl || el===lastHover){ const r=el.getBoundingClientRect(); post({ type:'mutation', payload:{ nodeId:el.dataset.nodeId, rect:{ x:r.x,y:r.y,width:r.width,height:r.height } } }); } } });
       function observe(){ document.querySelectorAll('[data-node-id]').forEach(el=>ro.observe(el)); }
       assign(document.getElementById('__ai_root')); observe(); post({ type:'init' });
       document.addEventListener('mouseover', e=>{ const el=e.target; if(!(el instanceof HTMLElement) || !el.dataset.nodeId) return; lastHover=el; post({ type:'hover', payload: payload(el) }); }, true);
       document.addEventListener('mouseout', e=>{ const el=e.target; if(!(el instanceof HTMLElement)) return; if(lastHover===el){ post({ type:'leave', payload:{ nodeId:el.dataset.nodeId } }); lastHover=null; } }, true);
-      document.addEventListener('click', e=>{ const el=e.target; if(!(el instanceof HTMLElement) || !el.dataset.nodeId) return; e.preventDefault(); e.stopPropagation(); post({ type:'click', payload: payload(el) }); }, true);
+      document.addEventListener('click', e=>{ 
+        let el=e.target; 
+        if(!(el instanceof HTMLElement)) return; 
+        while(el && !(el instanceof HTMLElement && el.dataset && el.dataset.nodeId)) el = el.parentElement; 
+        if(!(el instanceof HTMLElement) || !el.dataset.nodeId) return; 
+        e.preventDefault(); e.stopPropagation();
+        selectedEl=el; post({ type:'click', payload: payload(el) });
+      }, true);
+      // Sync positions during scroll (throttled by rAF)
+      let scrollPending=false; function flush(){ scrollPending=false; if(selectedEl) post({ type:'click', payload: payload(selectedEl) }); if(lastHover) post({ type:'hover', payload: payload(lastHover) }); }
+      document.addEventListener('scroll', ()=>{ if(!scrollPending){ scrollPending=true; requestAnimationFrame(flush); } }, true);
+      // Escape key clears selection
+      document.addEventListener('keydown', e=>{ if(e.key==='Escape' && selectedEl){ const id=selectedEl.dataset.nodeId; selectedEl=null; post({ type:'unselect', payload:{ nodeId:id } }); } }, true);
+      // Parent -> iframe unselect
+      window.addEventListener('message', ev=>{ const d=ev.data; if(!d||d.ns!=='preview-bridge-parent') return; const m=d.data; if(m&&m.type==='unselect' && selectedEl){ const id=selectedEl.dataset.nodeId; selectedEl=null; post({ type:'unselect', payload:{ nodeId:id } }); } });
     })();</script>
     </body></html>`,
     [safeHTML]
@@ -85,6 +99,10 @@ export const PreviewFrame: React.FC = () => {
               },
             });
           }
+          break;
+        }
+        case "unselect": {
+          store.setSelected(undefined);
           break;
         }
         case "mutation": {
