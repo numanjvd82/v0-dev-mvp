@@ -2,7 +2,7 @@
 // Renders hover/selection outlines over the iframe content plus the contextual toolbar.
 // Uses Framer Motion for subtle animations.
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePreviewStore } from "@/lib/previewStore";
 // Using the new Motion package ("motion") instead of legacy framer-motion import path.
 import { motion, AnimatePresence } from "motion/react";
@@ -29,20 +29,61 @@ export const PreviewOverlay: React.FC = () => {
   const iframeRect = usePreviewStore((s) => s.iframeRect);
   const setSelected = usePreviewStore((s) => s.setSelected);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerRect, setContainerRect] = useState<DOMRect | null>(null);
 
-  // Decide which element (hover vs selected) drives the toolbar position.
+  // Measure container rect so we can convert viewport-based iframe rect into container-relative coords.
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (containerRef.current) {
+        setContainerRect(containerRef.current.getBoundingClientRect());
+      }
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, []);
+
   const active = hover || selected;
-  const abs = active ? toAbsolute(active.rect, iframeRect) : undefined;
 
-  // Keep overlay container pointer-events none so page interactions pass through except toolbar.
+  // Base offset from iframe (viewport) to container (viewport) so elements align even with header offsets.
+  const baseLeft =
+    iframeRect && containerRect ? iframeRect.left - containerRect.left : 0;
+  const baseTop =
+    iframeRect && containerRect ? iframeRect.top - containerRect.top : 0;
+
+  // Helper to position any rect relative to container.
+  function place(rect?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) {
+    if (!rect) return undefined;
+    return {
+      left: baseLeft + rect.x,
+      top: baseTop + rect.y,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+
+  const hoverPos = hover ? place(hover.rect) : undefined;
+  const selectedPos = selected ? place(selected.rect) : undefined;
+  const activePos = active ? place(active.rect) : undefined;
+
+  // When toolbar is present, we want pointer events to pass through everywhere EXCEPT the toolbar itself.
+  // Container is pointer-events-none; toolbar div will re-enable pointer-events-auto.
   return (
     <div
       ref={containerRef}
       className="pointer-events-none absolute inset-0 z-40"
     >
-      {/* Hover outline */}
       <AnimatePresence>
-        {hover && iframeRect && (
+        {hover && hoverPos && (
           <motion.div
             key={"hover" + hover.nodeId}
             initial={{ opacity: 0 }}
@@ -50,18 +91,12 @@ export const PreviewOverlay: React.FC = () => {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
             className="absolute border border-blue-500/60 bg-blue-500/10 rounded-sm"
-            style={{
-              left: iframeRect.left + hover.rect.x,
-              top: iframeRect.top + hover.rect.y,
-              width: hover.rect.width,
-              height: hover.rect.height,
-            }}
+            style={hoverPos as any}
           />
         )}
       </AnimatePresence>
-      {/* Selected outline */}
       <AnimatePresence>
-        {selected && iframeRect && (
+        {selected && selectedPos && (
           <motion.div
             key={"sel" + selected.nodeId}
             initial={{ opacity: 0 }}
@@ -69,18 +104,12 @@ export const PreviewOverlay: React.FC = () => {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
             className="absolute border-2 border-amber-500/80 rounded-sm"
-            style={{
-              left: iframeRect.left + selected.rect.x,
-              top: iframeRect.top + selected.rect.y,
-              width: selected.rect.width,
-              height: selected.rect.height,
-            }}
+            style={selectedPos as any}
           />
         )}
       </AnimatePresence>
-      {/* Toolbar */}
       <AnimatePresence>
-        {active && abs && (
+        {active && activePos && (
           <motion.div
             key={"tb" + active.nodeId}
             initial={{ opacity: 0, y: -4 }}
@@ -89,9 +118,12 @@ export const PreviewOverlay: React.FC = () => {
             transition={{ duration: 0.15 }}
             className="absolute pointer-events-auto"
             style={{
-              left: abs.x,
-              top: Math.max(4, abs.y - 36),
+              left: activePos.left,
+              top: Math.max(4, activePos.top - 40), // 40px above element
             }}
+            // Stop events so underlying iframe element isn't clicked while interacting with toolbar
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-1 rounded-md bg-background/90 backdrop-blur border shadow-sm px-1 py-1">
               <span className="text-[11px] uppercase tracking-wide text-muted-foreground px-1">

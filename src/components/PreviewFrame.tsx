@@ -39,10 +39,78 @@ export const PreviewFrame: React.FC = () => {
     [safeHTML]
   );
 
-  // Listen for messages (hover / selection updates already handled in parent overlay logic)
+  // Listen for messages from the iframe instrumentation and update store (hover, selection, mutations)
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
-      // In this inline mode we don't expect inbound messages; reserved for future edits.
+      const { data, source } = ev as any;
+      if (!data || data.ns !== "preview-bridge") return;
+      // Only accept messages from our iframe
+      if (iframeRef.current && source !== iframeRef.current.contentWindow)
+        return;
+      const msg = data.data;
+      if (!msg || !msg.type) return;
+      const store = usePreviewStore.getState();
+      switch (msg.type) {
+        case "hover": {
+          const { nodeId, tag, rect } = msg.payload || {};
+          if (nodeId && rect) {
+            store.setHover({
+              nodeId,
+              tag,
+              rect: {
+                x: rect.x,
+                y: rect.y,
+                width: rect.width,
+                height: rect.height,
+              },
+            });
+          }
+          break;
+        }
+        case "leave": {
+          store.setHover(undefined);
+          break;
+        }
+        case "click": {
+          const { nodeId, tag, rect } = msg.payload || {};
+          if (nodeId && rect) {
+            store.setSelected({
+              nodeId,
+              tag,
+              rect: {
+                x: rect.x,
+                y: rect.y,
+                width: rect.width,
+                height: rect.height,
+              },
+            });
+          }
+          break;
+        }
+        case "mutation": {
+          const { nodeId, rect } = msg.payload || {};
+          if (nodeId && rect) {
+            store.updateHoverRect(nodeId, {
+              x: rect.x,
+              y: rect.y,
+              width: rect.width,
+              height: rect.height,
+            });
+          }
+          break;
+        }
+        case "init": {
+          // Re-sync iframe rect when the doc initializes
+          const el = iframeRef.current;
+          if (el) {
+            const r = el.getBoundingClientRect();
+            store.setIframeRect(r as DOMRect);
+          }
+          break;
+        }
+        default:
+          break;
+      }
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
